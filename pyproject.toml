@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dustwave-alignment-runner"
+version = "0.1.0"
+description = "Pinned English/Spanish forced-alignment adapters and evidence manifests"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = "MIT"
+authors = [{ name = "Dust Wave" }]
+dependencies = []
+
+[project.optional-dependencies]
+stable-ts = ["stable-ts==2.19.1"]
+whisperx = ["whisperx==3.8.6"]
+
+[project.scripts]
+dustwave-align = "dustwave_alignment_runner.cli:main"
+
+[dependency-groups]
+dev = [
+  "pytest>=9,<10",
+  "ruff>=0.14,<0.15",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dustwave_alignment_runner"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

@@ -1,0 +1,1 @@
+"""Optional forced-alignment adapters."""
