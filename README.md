@@ -42,12 +42,12 @@ uv run dustwave-align run \
   --runner-digest sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 ```
 
-The request must contain:
+Request schema `2` must contain:
 
 - schema, job, alignment-revision, and language identifiers;
 - a regular audio file underneath `--input-root`, its SHA-256 and duration;
-- canonical reviewed cues, stable word IDs, and the SHA-256 of canonical cue
-  JSON; and
+- canonical reviewed cues and stable word IDs, the approved transcript content
+  SHA-256, and a separate SHA-256 of canonical cue/word projection JSON; and
 - explicit adapter model/model-version/settings metadata.
 
 The runner rejects traversal, symlink escapes, oversized or changed audio,

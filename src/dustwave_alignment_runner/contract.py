@@ -12,7 +12,7 @@ MAX_REQUEST_BYTES = 5 * 1024 * 1024
 MAX_AUDIO_BYTES = 4 * 1024 * 1024 * 1024
 MAX_AUDIO_DURATION_MS = 24 * 60 * 60 * 1000
 MAX_CUES = 20_000
-MAX_WORDS = 200_000
+MAX_WORDS = 25_000
 IDENTIFIER = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 SHA256 = re.compile(r"^[a-f0-9]{64}$")
 RUNNER_DIGEST = re.compile(r"^sha256:[a-f0-9]{64}$")
@@ -100,7 +100,7 @@ def validate_request(
         },
         "request",
     )
-    if payload.get("schemaVersion") != "1":
+    if payload.get("schemaVersion") != "2":
         raise ContractError("Unsupported request schemaVersion.")
     _identifier(payload.get("jobId"), "jobId")
     _identifier(payload.get("alignmentRevisionId"), "alignmentRevisionId")
@@ -135,17 +135,26 @@ def validate_request(
         raise ContractError("Audio duration exceeds 24 hours.")
 
     transcript = _mapping(payload.get("transcript"), "transcript")
-    _exact_keys(transcript, {"sha256", "cues"}, "transcript")
-    transcript_sha256 = transcript.get("sha256")
-    if not isinstance(transcript_sha256, str) or not SHA256.fullmatch(
-        transcript_sha256
+    _exact_keys(
+        transcript,
+        {"contentSha256", "projectionSha256", "cues"},
+        "transcript",
+    )
+    content_sha256 = transcript.get("contentSha256")
+    if not isinstance(content_sha256, str) or not SHA256.fullmatch(content_sha256):
+        raise ContractError("transcript.contentSha256 must be lowercase SHA-256.")
+    projection_sha256 = transcript.get("projectionSha256")
+    if not isinstance(projection_sha256, str) or not SHA256.fullmatch(
+        projection_sha256
     ):
-        raise ContractError("transcript.sha256 must be lowercase SHA-256.")
+        raise ContractError("transcript.projectionSha256 must be lowercase SHA-256.")
     cues = transcript.get("cues")
     if not isinstance(cues, list) or not 1 <= len(cues) <= MAX_CUES:
         raise ContractError(f"transcript.cues must contain 1-{MAX_CUES} cues.")
-    if sha256_hex(canonical_json_bytes(cues)) != transcript_sha256:
-        raise ContractError("Transcript SHA-256 does not match canonical cues.")
+    if sha256_hex(canonical_json_bytes(cues)) != projection_sha256:
+        raise ContractError(
+            "Transcript projection SHA-256 does not match canonical cues."
+        )
 
     cue_ids: set[str] = set()
     word_ids: set[str] = set()

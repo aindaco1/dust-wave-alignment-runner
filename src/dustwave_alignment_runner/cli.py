@@ -108,12 +108,15 @@ def _run(arguments: argparse.Namespace) -> None:
     elapsed_seconds = round(time.perf_counter() - started_at, 3)
     adapter = validated.payload["adapter"]
     manifest: dict[str, Any] = {
-        "schemaVersion": "1",
+        "schemaVersion": "2",
         "jobId": validated.payload["jobId"],
         "alignmentRevisionId": validated.payload["alignmentRevisionId"],
         "language": validated.payload["language"],
         "sourceAudioSha256": validated.payload["audio"]["sha256"],
-        "transcriptRevisionSha256": validated.payload["transcript"]["sha256"],
+        "transcriptContentSha256": validated.payload["transcript"]["contentSha256"],
+        "transcriptProjectionSha256": validated.payload["transcript"][
+            "projectionSha256"
+        ],
         "adapter": {
             "name": arguments.adapter,
             "version": adapter_version,
@@ -241,12 +244,13 @@ def _reuse_existing_result(
         raise ContractError("Existing output manifest digest is invalid.")
     payload = validated.payload
     expected = {
-        "schemaVersion": "1",
+        "schemaVersion": "2",
         "jobId": payload["jobId"],
         "alignmentRevisionId": payload["alignmentRevisionId"],
         "language": payload["language"],
         "sourceAudioSha256": payload["audio"]["sha256"],
-        "transcriptRevisionSha256": payload["transcript"]["sha256"],
+        "transcriptContentSha256": payload["transcript"]["contentSha256"],
+        "transcriptProjectionSha256": payload["transcript"]["projectionSha256"],
     }
     if any(manifest.get(key) != value for key, value in expected.items()):
         raise ContractError("Existing output is bound to different source inputs.")

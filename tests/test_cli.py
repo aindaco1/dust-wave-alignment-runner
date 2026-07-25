@@ -28,7 +28,7 @@ def test_fixture_cli_writes_deterministic_non_passing_evidence(
         }
     ]
     request = {
-        "schemaVersion": "1",
+        "schemaVersion": "2",
         "jobId": "job_fixture",
         "alignmentRevisionId": "alignment_fixture",
         "language": "es",
@@ -38,7 +38,8 @@ def test_fixture_cli_writes_deterministic_non_passing_evidence(
             "durationMs": 2_000,
         },
         "transcript": {
-            "sha256": sha256_hex(canonical_json_bytes(cues)),
+            "contentSha256": "a" * 64,
+            "projectionSha256": sha256_hex(canonical_json_bytes(cues)),
             "cues": cues,
         },
         "adapter": {
@@ -99,7 +100,7 @@ def test_fixture_cli_rejects_existing_result_for_different_runner(
         }
     ]
     request = {
-        "schemaVersion": "1",
+        "schemaVersion": "2",
         "jobId": "job_fixture",
         "alignmentRevisionId": "alignment_fixture",
         "language": "es",
@@ -109,7 +110,8 @@ def test_fixture_cli_rejects_existing_result_for_different_runner(
             "durationMs": 1_000,
         },
         "transcript": {
-            "sha256": sha256_hex(canonical_json_bytes(cues)),
+            "contentSha256": "a" * 64,
+            "projectionSha256": sha256_hex(canonical_json_bytes(cues)),
             "cues": cues,
         },
         "adapter": {

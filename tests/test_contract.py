@@ -27,7 +27,7 @@ def request_fixture(root: Path) -> dict:
         }
     ]
     return {
-        "schemaVersion": "1",
+        "schemaVersion": "2",
         "jobId": "job_fixture",
         "alignmentRevisionId": "alignment_fixture",
         "language": "es",
@@ -37,7 +37,8 @@ def request_fixture(root: Path) -> dict:
             "durationMs": 2_000,
         },
         "transcript": {
-            "sha256": sha256_hex(canonical_json_bytes(cues)),
+            "contentSha256": "a" * 64,
+            "projectionSha256": sha256_hex(canonical_json_bytes(cues)),
             "cues": cues,
         },
         "adapter": {
@@ -62,8 +63,8 @@ def test_accepts_canonical_checksums_and_stable_words(tmp_path: Path) -> None:
     [
         (lambda value: value["audio"].update(sha256="0" * 64), "Audio SHA-256"),
         (
-            lambda value: value["transcript"].update(sha256="0" * 64),
-            "Transcript SHA-256",
+            lambda value: value["transcript"].update(projectionSha256="0" * 64),
+            "Transcript projection SHA-256",
         ),
         (
             lambda value: value["transcript"]["cues"][0]["words"].append(
@@ -86,7 +87,9 @@ def test_rejects_changed_or_ambiguous_input(
     mutation(request)
     if "wordId values" in message:
         cues = request["transcript"]["cues"]
-        request["transcript"]["sha256"] = sha256_hex(canonical_json_bytes(cues))
+        request["transcript"]["projectionSha256"] = sha256_hex(
+            canonical_json_bytes(cues)
+        )
     with pytest.raises(ContractError, match=message):
         validate_request(request, tmp_path, "fixture")
 
