@@ -7,6 +7,7 @@ import pytest
 from dustwave_alignment_runner.contract import (
     ContractError,
     canonical_json_bytes,
+    read_bounded_json,
     sha256_hex,
     validate_request,
 )
@@ -111,3 +112,22 @@ def test_rejects_unsafe_model_reference(tmp_path: Path) -> None:
 
     with pytest.raises(ContractError, match="safe package or model"):
         validate_request(request, tmp_path, "fixture")
+
+
+@pytest.mark.parametrize(
+    "content, message",
+    [
+        ('{"schemaVersion":"2","schemaVersion":"2"}', "duplicate field"),
+        ('{"value":NaN}', "unsupported numeric constant"),
+    ],
+)
+def test_rejects_ambiguous_or_non_finite_json(
+    tmp_path: Path,
+    content: str,
+    message: str,
+) -> None:
+    request_path = tmp_path / "request.json"
+    request_path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ContractError, match=message):
+        read_bounded_json(request_path)

@@ -58,6 +58,17 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def parse_strict_json(value: str, name: str) -> Any:
+    try:
+        return json.loads(
+            value,
+            object_pairs_hook=_unique_object,
+            parse_constant=_reject_json_constant,
+        )
+    except json.JSONDecodeError as error:
+        raise ContractError(f"{name} is invalid JSON.") from error
+
+
 def normalize_lexical_word(value: str) -> str:
     decomposed = unicodedata.normalize("NFKD", str(value))
     return "".join(
@@ -74,9 +85,10 @@ def read_bounded_json(path: Path) -> dict[str, Any]:
     if size <= 0 or size > MAX_REQUEST_BYTES:
         raise ContractError("Request JSON exceeds its bounded size.")
     try:
-        parsed = json.loads(resolved.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        content = resolved.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
         raise ContractError("Request JSON is unreadable or invalid.") from error
+    parsed = parse_strict_json(content, "Request JSON")
     if not isinstance(parsed, dict):
         raise ContractError("Request JSON must be an object.")
     return parsed
@@ -236,6 +248,19 @@ def _mapping(value: Any, name: str) -> dict[str, Any]:
 def _exact_keys(value: dict[str, Any], expected: set[str], name: str) -> None:
     if set(value) != expected:
         raise ContractError(f"{name} contains missing or unknown fields.")
+
+
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ContractError(f'JSON contains duplicate field "{key}".')
+        value[key] = item
+    return value
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ContractError(f"JSON contains unsupported numeric constant {value}.")
 
 
 def _identifier(value: Any, name: str) -> str:

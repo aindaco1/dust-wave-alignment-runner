@@ -30,6 +30,25 @@ uv run pytest
 
 Core CI does not install model extras or download model weights.
 
+## Private benchmark bundle
+
+The runner also assembles the human-reviewed H1 evidence into the exact
+Podcast import contract without uploading it:
+
+```sh
+uv run dustwave-align benchmark-bundle \
+  --manifest /private/alignment-benchmark/workspace.json \
+  --input-root /private/alignment-benchmark \
+  --output /private/alignment-benchmark/out/submission.json
+```
+
+It reuses the runner request/result validators, derives candidate and
+idempotency evidence from exact primary/replay results, accepts separate
+human-gold, preview-review, and measured resource files, and writes one
+canonical immutable mode-`0600` file. The server remains the source of truth
+for pass/fail and re-evaluates the bundle during private Super-admin import.
+See [the private benchmark bundle contract](docs/BENCHMARK_BUNDLE.md).
+
 ## Run contract
 
 ```sh
