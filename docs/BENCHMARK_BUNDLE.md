@@ -6,6 +6,11 @@ not upload anything, run a model, decide whether an adapter passes, or print
 transcript text. The Podcast Worker independently validates the closed schema
 and re-runs the quality evaluator at import time.
 
+Use the [private review-packet flow](BENCHMARK_REVIEW.md) to select balanced
+candidates and materialize the gold/preview inputs without copying word IDs or
+hand-authoring those schemas. This bundler remains the final independent
+validation and submission boundary.
+
 Keep the entire workspace outside Git in an encrypted or otherwise
 access-controlled directory. It contains source audio hashes, human-reviewed
 transcript words and boundaries, candidate timings, and preview decisions.

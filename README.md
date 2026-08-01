@@ -35,6 +35,12 @@ Core CI does not install model extras or download model weights.
 The runner also assembles the human-reviewed H1 evidence into the exact
 Podcast import contract without uploading it:
 
+Before bundling, the private review-packet commands deterministically select a
+balanced English/Spanish sample and turn one packet-bound review export into
+canonical gold and preview files. They remove manual IDs and schema editing but
+never replace the rights, listening, or word-boundary decisions. See the
+[private benchmark review contract](docs/BENCHMARK_REVIEW.md).
+
 ```sh
 uv run dustwave-align benchmark-bundle \
   --manifest /private/alignment-benchmark/workspace.json \
