@@ -416,6 +416,45 @@ def test_review_packet_rejects_candidate_projection_tampering(tmp_path: Path) ->
         )
 
 
+def test_workspace_v2_consumes_exact_review_materialization(tmp_path: Path) -> None:
+    paths = _workspace(tmp_path)
+    materialization_path = _materialized_review(tmp_path)
+    workspace = json.loads(paths["workspace"].read_text(encoding="utf-8"))
+    workspace["schemaVersion"] = "alignment-benchmark-workspace-v2"
+    workspace["reviewMaterializationPath"] = materialization_path.relative_to(
+        tmp_path
+    ).as_posix()
+    workspace.pop("previewReviewsPath")
+    workspace["fixtures"][0].pop("goldPath")
+    workspace_v2 = tmp_path / "workspace-v2.json"
+    _write_json(workspace_v2, workspace)
+    output = tmp_path / "submission-v2.json"
+
+    result = build_benchmark_submission(workspace_v2, tmp_path, output)
+
+    submission = json.loads(output.read_text(encoding="utf-8"))
+    assert result["englishGoldWordCount"] == 2
+    assert result["previewReviewCount"] == 2
+    assert submission["benchmark"]["fixtures"][0]["goldWords"][0] == {
+        "wordId": "word_1",
+        "cueId": "cue_1",
+        "text": "hello",
+        "startsAtMs": 100,
+        "endsAtMs": 400,
+        "scorable": True,
+    }
+
+    materialization = json.loads(materialization_path.read_text(encoding="utf-8"))
+    gold_path = tmp_path / materialization["goldFiles"][0]["path"]
+    gold_path.write_text("tampered", encoding="utf-8")
+    with pytest.raises(ContractError, match="digest does not match"):
+        build_benchmark_submission(
+            workspace_v2,
+            tmp_path,
+            tmp_path / "tampered-submission.json",
+        )
+
+
 def _workspace(root: Path) -> dict[str, Any]:
     audio = root / "audio.bin"
     audio.write_bytes(b"private owned audio")
@@ -578,6 +617,51 @@ def _review_workspace(root: Path) -> Path:
         },
     )
     return review_workspace
+
+
+def _materialized_review(root: Path) -> Path:
+    review_workspace = _review_workspace(root)
+    packet_path = root / "review" / "packet.json"
+    packet_result = build_benchmark_review_packet(
+        review_workspace,
+        root,
+        packet_path,
+    )
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    gold = json.loads((root / "gold.json").read_text(encoding="utf-8"))
+    gold_by_word = {word["wordId"]: word for word in gold["goldWords"]}
+    reviews = []
+    for fixture in packet["fixtures"]:
+        for word in fixture["reviewWords"]:
+            reviewed = gold_by_word[word["wordId"]]
+            reviews.append(
+                {
+                    "fixtureId": fixture["fixtureId"],
+                    "wordId": word["wordId"],
+                    "startsAtMs": reviewed["startsAtMs"],
+                    "endsAtMs": reviewed["endsAtMs"],
+                    "scorable": True,
+                    "acceptedWithoutClipping": (
+                        True if word["previewReviewRequired"] else None
+                    ),
+                }
+            )
+    completion_path = root / "review" / "completion.json"
+    _write_json(
+        completion_path,
+        {
+            "schemaVersion": "alignment-benchmark-review-completion-v1",
+            "packetSha256": packet_result["packetSha256"],
+            "reviews": reviews,
+        },
+    )
+    materialize_benchmark_review(
+        packet_path,
+        completion_path,
+        root,
+        Path("review/materialized"),
+    )
+    return root / "review" / "materialized" / "materialization.json"
 
 
 def _candidate(

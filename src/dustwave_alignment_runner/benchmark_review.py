@@ -5,6 +5,7 @@ from typing import Any
 
 from .benchmark import (
     BENCHMARK_ADAPTERS,
+    BENCHMARK_REVIEW_MATERIALIZATION_SCHEMA,
     BENCHMARK_RUNNER_REPOSITORY,
     BENCHMARK_RUNNER_REVISION,
     MAXIMUM_FIXTURE_DURATION_MS,
@@ -35,10 +36,6 @@ from .result_contract import load_bound_result, write_immutable
 BENCHMARK_REVIEW_WORKSPACE_SCHEMA = "alignment-benchmark-review-workspace-v1"
 BENCHMARK_REVIEW_PACKET_SCHEMA = "alignment-benchmark-review-packet-v1"
 BENCHMARK_REVIEW_COMPLETION_SCHEMA = "alignment-benchmark-review-completion-v1"
-BENCHMARK_REVIEW_MATERIALIZATION_SCHEMA = (
-    "alignment-benchmark-review-materialization-v1"
-)
-
 MAXIMUM_REVIEW_PACKET_BYTES = 8 * 1024 * 1024
 GOLD_REVIEW_TARGET_PER_LANGUAGE = 500
 PREVIEW_REVIEW_TARGET_PER_LANGUAGE = 60

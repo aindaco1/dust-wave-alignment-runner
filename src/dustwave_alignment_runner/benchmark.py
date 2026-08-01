@@ -7,9 +7,11 @@ from typing import Any
 
 from .contract import (
     MAX_REQUEST_BYTES,
+    SHA256,
     ContractError,
     ValidatedRequest,
     canonical_json_bytes,
+    file_sha256,
     read_bounded_json,
     sha256_hex,
     validate_request,
@@ -17,10 +19,14 @@ from .contract import (
 from .result_contract import load_bound_result, write_immutable
 
 BENCHMARK_WORKSPACE_SCHEMA = "alignment-benchmark-workspace-v1"
+BENCHMARK_WORKSPACE_SCHEMA_V2 = "alignment-benchmark-workspace-v2"
 BENCHMARK_GOLD_SCHEMA = "alignment-benchmark-gold-v1"
 BENCHMARK_PREVIEWS_SCHEMA = "alignment-benchmark-previews-v1"
 BENCHMARK_RESOURCES_SCHEMA = "alignment-benchmark-resources-v1"
 BENCHMARK_SUBMISSION_SCHEMA = "alignment-benchmark-submission-v1"
+BENCHMARK_REVIEW_MATERIALIZATION_SCHEMA = (
+    "alignment-benchmark-review-materialization-v1"
+)
 BENCHMARK_RUNNER_REPOSITORY = "aindaco1/dust-wave-alignment-runner"
 BENCHMARK_RUNNER_REVISION = "e611801d2af82dcdb079444b7e8a7eea4309d1a6"
 BENCHMARK_RUNNER_DIGEST = (
@@ -70,21 +76,44 @@ def build_benchmark_submission(
         raise ContractError("input-root must be a directory.")
     manifest_file = _input_path(root, manifest_path, "manifest")
     workspace = read_bounded_json(manifest_file)
-    _exact_keys(
-        workspace,
-        {
-            "schemaVersion",
-            "submissionId",
-            "corpusVersion",
-            "adapter",
+    schema_version = workspace.get("schemaVersion")
+    common_workspace_fields = {
+        "schemaVersion",
+        "submissionId",
+        "corpusVersion",
+        "adapter",
+        "fixtures",
+        "resourceRunsPath",
+        "cleanEnvironmentReproduced",
+    }
+    if schema_version == BENCHMARK_WORKSPACE_SCHEMA:
+        _exact_keys(
+            workspace,
+            common_workspace_fields | {"previewReviewsPath"},
+            "benchmark workspace",
+        )
+        fixture_descriptors = _bounded_array(
+            workspace["fixtures"],
             "fixtures",
-            "previewReviewsPath",
-            "resourceRunsPath",
-            "cleanEnvironmentReproduced",
-        },
-        "benchmark workspace",
-    )
-    if workspace["schemaVersion"] != BENCHMARK_WORKSPACE_SCHEMA:
+            MAXIMUM_FIXTURES,
+        )
+        preview_reviews_reference = workspace["previewReviewsPath"]
+    elif schema_version == BENCHMARK_WORKSPACE_SCHEMA_V2:
+        _exact_keys(
+            workspace,
+            common_workspace_fields | {"reviewMaterializationPath"},
+            "benchmark workspace",
+        )
+        materialization = _load_review_materialization(
+            root,
+            workspace["reviewMaterializationPath"],
+        )
+        fixture_descriptors = _materialized_fixture_descriptors(
+            workspace["fixtures"],
+            materialization["goldPaths"],
+        )
+        preview_reviews_reference = materialization["previewReviewsPath"]
+    else:
         raise ContractError("Unsupported benchmark workspace schemaVersion.")
     submission_id = _identifier(workspace["submissionId"], "submissionId")
     corpus_version = _identifier(workspace["corpusVersion"], "corpusVersion")
@@ -97,11 +126,6 @@ def build_benchmark_submission(
         "cleanEnvironmentReproduced",
     )
 
-    fixture_descriptors = _bounded_array(
-        workspace["fixtures"],
-        "fixtures",
-        MAXIMUM_FIXTURES,
-    )
     if not fixture_descriptors:
         raise ContractError("fixtures must contain at least one fixture.")
     fixtures: list[dict[str, Any]] = []
@@ -141,7 +165,7 @@ def build_benchmark_submission(
 
     preview_reviews = _load_preview_reviews(
         root,
-        workspace["previewReviewsPath"],
+        preview_reviews_reference,
         eligible_preview_keys,
     )
     resource_runs = _load_resource_runs(
@@ -181,6 +205,100 @@ def build_benchmark_submission(
         "idempotencyCheckCount": len(idempotency_checks),
         "cleanEnvironmentReproduced": clean_reproduced,
     }
+
+
+def _load_review_materialization(root: Path, reference: Any) -> dict[str, Any]:
+    path = _input_path(root, reference, "reviewMaterializationPath")
+    payload = read_bounded_json(path)
+    _exact_keys(
+        payload,
+        {
+            "schemaVersion",
+            "packetSha256",
+            "goldFiles",
+            "previewReviewsPath",
+            "previewReviewsSha256",
+        },
+        "review materialization",
+    )
+    if payload["schemaVersion"] != BENCHMARK_REVIEW_MATERIALIZATION_SCHEMA:
+        raise ContractError("Review materialization schemaVersion is unsupported.")
+    _sha256(payload["packetSha256"], "review materialization packetSha256")
+    values = _bounded_array(
+        payload["goldFiles"],
+        "review materialization goldFiles",
+        MAXIMUM_FIXTURES,
+    )
+    if not values:
+        raise ContractError("Review materialization goldFiles must not be empty.")
+    gold_paths: dict[str, Path] = {}
+    for index, value in enumerate(values):
+        field = f"review materialization goldFiles[{index}]"
+        item = _mapping(value, field)
+        _exact_keys(item, {"fixtureId", "path", "sha256"}, field)
+        fixture_id = _identifier(item["fixtureId"], f"{field}.fixtureId")
+        if fixture_id in gold_paths:
+            raise ContractError("Review materialization fixture IDs must be unique.")
+        gold_path = _input_path(root, item["path"], f"{field}.path")
+        expected_sha256 = _sha256(item["sha256"], f"{field}.sha256")
+        if file_sha256(gold_path) != expected_sha256:
+            raise ContractError(f"{field} digest does not match its file.")
+        gold_paths[fixture_id] = gold_path
+    preview_path = _input_path(
+        root,
+        payload["previewReviewsPath"],
+        "review materialization previewReviewsPath",
+    )
+    preview_sha256 = _sha256(
+        payload["previewReviewsSha256"],
+        "review materialization previewReviewsSha256",
+    )
+    if file_sha256(preview_path) != preview_sha256:
+        raise ContractError(
+            "Review materialization preview digest does not match its file."
+        )
+    return {
+        "goldPaths": gold_paths,
+        "previewReviewsPath": preview_path,
+    }
+
+
+def _materialized_fixture_descriptors(
+    value: Any,
+    gold_paths: dict[str, Path],
+) -> list[dict[str, Any]]:
+    descriptors = _bounded_array(value, "fixtures", MAXIMUM_FIXTURES)
+    materialized: list[dict[str, Any]] = []
+    seen_fixture_ids: set[str] = set()
+    for index, descriptor_value in enumerate(descriptors):
+        field = f"fixtures[{index}]"
+        descriptor = _mapping(descriptor_value, field)
+        _exact_keys(
+            descriptor,
+            {
+                "fixtureId",
+                "requestPath",
+                "resultPath",
+                "replayResultPath",
+                "duplicateBillableJobCreated",
+            },
+            field,
+        )
+        fixture_id = _identifier(descriptor["fixtureId"], f"{field}.fixtureId")
+        if fixture_id in seen_fixture_ids:
+            raise ContractError("fixtureId values must be unique.")
+        seen_fixture_ids.add(fixture_id)
+        gold_path = gold_paths.get(fixture_id)
+        if gold_path is None:
+            raise ContractError(
+                f"{field} has no matching review materialization gold file."
+            )
+        materialized.append({**descriptor, "goldPath": gold_path})
+    if set(gold_paths) != seen_fixture_ids:
+        raise ContractError(
+            "Review materialization gold files do not exactly match fixtures."
+        )
+    return materialized
 
 
 def _build_fixture(
@@ -705,6 +823,12 @@ def _bounded_array(value: Any, field: str, maximum: int) -> list[Any]:
 def _identifier(value: Any, field: str) -> str:
     if not isinstance(value, str) or not PLAIN_IDENTIFIER.fullmatch(value):
         raise ContractError(f"{field} has an invalid identifier.")
+    return value
+
+
+def _sha256(value: Any, field: str) -> str:
+    if not isinstance(value, str) or not SHA256.fullmatch(value):
+        raise ContractError(f"{field} must be lowercase SHA-256.")
     return value
 
 
