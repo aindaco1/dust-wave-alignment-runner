@@ -47,6 +47,11 @@ Convention-based private fixture directories can also be discovered into the
 same immutable review-workspace schema, eliminating fixture ID/path entry while
 retaining exact pinned-input validation.
 
+Content-free Podcast workflow evidence v2 can be imported directly into the
+existing resource-run schema, retaining only validated English/Spanish timing,
+memory, disk, and runner measurements while reporting truthful 60-minute
+shortfalls.
+
 ```sh
 uv run dustwave-align benchmark-bundle \
   --manifest /private/alignment-benchmark/workspace.json \
