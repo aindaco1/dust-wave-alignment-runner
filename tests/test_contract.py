@@ -13,6 +13,43 @@ from dustwave_alignment_runner.contract import (
 )
 
 
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (0.0, "0"),
+        (-0.0, "0"),
+        (62.0, "62"),
+        (1e-6, "0.000001"),
+        (1.234567890123456e-6, "0.000001234567890123456"),
+        (1e-7, "1e-7"),
+        (1e20, "100000000000000000000"),
+        (1e21, "1e+21"),
+        (-1.25e21, "-1.25e+21"),
+    ],
+)
+def test_canonical_numbers_match_ecmascript_json_stringify(
+    value: float,
+    expected: str,
+) -> None:
+    assert canonical_json_bytes(value) == expected.encode()
+
+
+def test_canonical_json_matches_worker_result_digest_shape() -> None:
+    value = {
+        "resource": {
+            "inputDurationMinutes": 62.0,
+            "wallClockMinutes": 8.0,
+            "peakMemoryMb": 1_000.0,
+            "confidence": 1e-6,
+            "runner": "python-3.12",
+        }
+    }
+    assert canonical_json_bytes(value) == (
+        b'{"resource":{"confidence":0.000001,"inputDurationMinutes":62,'
+        b'"peakMemoryMb":1000,"runner":"python-3.12","wallClockMinutes":8}}'
+    )
+
+
 def request_fixture(root: Path) -> dict:
     audio = root / "episode.audio"
     audio.write_bytes(b"owned fixture audio")

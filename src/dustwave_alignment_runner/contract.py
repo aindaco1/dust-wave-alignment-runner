@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -38,12 +39,76 @@ class ValidatedRequest:
 
 
 def canonical_json_bytes(value: Any) -> bytes:
-    return json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
+    """Serialize the bounded contracts exactly like the JS canonicalizer.
+
+    Python and ECMAScript otherwise disagree on valid JSON spellings such as
+    ``1.0`` versus ``1`` and ``1e-06`` versus ``0.000001``. The result digest is
+    verified in a Worker, so its number representation must follow
+    ``JSON.stringify`` rather than Python's default encoder.
+    """
+
+    return _canonical_json(value).encode("utf-8")
+
+
+def _canonical_json(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return _ecmascript_number(value)
+    if isinstance(value, list):
+        return "[" + ",".join(_canonical_json(item) for item in value) + "]"
+    if isinstance(value, dict):
+        if not all(isinstance(key, str) for key in value):
+            raise ContractError("Canonical JSON object keys must be strings.")
+        return (
+            "{"
+            + ",".join(
+                f"{_canonical_json(key)}:{_canonical_json(value[key])}"
+                for key in sorted(value)
+            )
+            + "}"
+        )
+    raise ContractError("Canonical JSON contains an unsupported value.")
+
+
+def _ecmascript_number(value: float) -> str:
+    if not math.isfinite(value):
+        raise ContractError("Canonical JSON numbers must be finite.")
+    if value == 0:
+        return "0"
+
+    negative = value < 0
+    raw = repr(abs(value)).lower()
+    mantissa, exponent_text = (raw.split("e", 1) + ["0"])[:2]
+    exponent = int(exponent_text)
+    integer, separator, fraction = mantissa.partition(".")
+    digits = integer + (fraction if separator else "")
+    decimal_at = len(integer) + exponent
+    while len(digits) > 1 and digits.endswith("0"):
+        digits = digits[:-1]
+
+    magnitude = abs(value)
+    if 1e-6 <= magnitude < 1e21:
+        if decimal_at <= 0:
+            rendered = "0." + ("0" * -decimal_at) + digits
+        elif decimal_at >= len(digits):
+            rendered = digits + ("0" * (decimal_at - len(digits)))
+        else:
+            rendered = digits[:decimal_at] + "." + digits[decimal_at:]
+    else:
+        scientific_exponent = decimal_at - 1
+        coefficient = digits[0]
+        if len(digits) > 1:
+            coefficient += "." + digits[1:]
+        exponent_sign = "+" if scientific_exponent >= 0 else ""
+        rendered = f"{coefficient}e{exponent_sign}{scientific_exponent}"
+    return "-" + rendered if negative else rendered
 
 
 def sha256_hex(value: bytes) -> str:
