@@ -13,6 +13,28 @@ credentials, or unrelated episode material.
 
 ## Build the packet
 
+When private fixture jobs use the convention
+`fixtures/<fixtureId>/request.json` and
+`fixtures/<fixtureId>/result-primary.json`, discover the review workspace
+without copying IDs or paths:
+
+```sh
+uv run dustwave-align benchmark-review-discover \
+  --adapter whisperx \
+  --fixtures-root fixtures \
+  --input-root /private/alignment-benchmark \
+  --output /private/alignment-benchmark/review-workspace.json
+```
+
+Discovery is deterministic and immutable. It rejects incomplete fixture
+directories, symlinks, path escapes, unpinned requests/results, and sources
+outside the two-to-five-minute window. Standard output contains only the
+workspace path, digest, byte length, and aggregate language counts. Rights and
+human review are deliberately not inferred.
+
+If a private orchestration system does not use that directory convention,
+create the same workspace manifest directly:
+
 Create a private workspace manifest:
 
 ```json

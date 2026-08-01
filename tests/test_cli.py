@@ -204,3 +204,37 @@ def test_benchmark_review_cli_dispatches_packet_and_materialization(
     main()
     assert json.loads(capsys.readouterr().out) == {"goldFileCount": 12}
     assert materialization_calls == [(packet, completion, tmp_path, output)]
+
+
+def test_benchmark_review_cli_dispatches_discovery(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    calls = []
+    monkeypatch.setattr(
+        "dustwave_alignment_runner.cli.discover_benchmark_review_workspace",
+        lambda *arguments: calls.append(arguments) or {"fixtureCount": 12},
+    )
+    fixtures = tmp_path / "fixtures"
+    output = tmp_path / "review-workspace.json"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "dustwave-align",
+            "benchmark-review-discover",
+            "--adapter",
+            "whisperx",
+            "--fixtures-root",
+            str(fixtures),
+            "--input-root",
+            str(tmp_path),
+            "--output",
+            str(output),
+        ],
+    )
+
+    main()
+
+    assert json.loads(capsys.readouterr().out) == {"fixtureCount": 12}
+    assert calls == [(tmp_path, fixtures, "whisperx", output)]

@@ -43,6 +43,10 @@ offline review app provides the bilingual, audio-hash-bound review surface with
 resumable local exports and no network path. See the
 [private benchmark review contract](docs/BENCHMARK_REVIEW.md).
 
+Convention-based private fixture directories can also be discovered into the
+same immutable review-workspace schema, eliminating fixture ID/path entry while
+retaining exact pinned-input validation.
+
 ```sh
 uv run dustwave-align benchmark-bundle \
   --manifest /private/alignment-benchmark/workspace.json \

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .benchmark import build_benchmark_submission
+from .benchmark_discovery import discover_benchmark_review_workspace
 from .benchmark_review import (
     build_benchmark_review_packet,
     materialize_benchmark_review,
@@ -48,6 +49,16 @@ def main() -> None:
     bundle.add_argument("--manifest", type=Path, required=True)
     bundle.add_argument("--input-root", type=Path, required=True)
     bundle.add_argument("--output", type=Path, required=True)
+    review_discover = subcommands.add_parser(
+        "benchmark-review-discover",
+        help="Discover one immutable private H1 review workspace.",
+    )
+    review_discover.add_argument(
+        "--adapter", choices=["stable-ts", "whisperx"], required=True
+    )
+    review_discover.add_argument("--fixtures-root", type=Path, required=True)
+    review_discover.add_argument("--input-root", type=Path, required=True)
+    review_discover.add_argument("--output", type=Path, required=True)
     review_packet = subcommands.add_parser(
         "benchmark-review-packet",
         help="Build one immutable private H1 review packet.",
@@ -85,6 +96,19 @@ def main() -> None:
                     build_benchmark_submission(
                         arguments.manifest,
                         arguments.input_root,
+                        arguments.output,
+                    ),
+                    separators=(",", ":"),
+                )
+            )
+            return
+        if arguments.command == "benchmark-review-discover":
+            print(
+                json.dumps(
+                    discover_benchmark_review_workspace(
+                        arguments.input_root,
+                        arguments.fixtures_root,
+                        arguments.adapter,
                         arguments.output,
                     ),
                     separators=(",", ":"),
