@@ -96,9 +96,12 @@ The materializer validates every decision before writing. It then creates:
 
 All outputs are immutable, atomically installed, mode `0600`, and safe to
 recreate idempotently. Standard output contains only paths, hashes, and counts.
-The existing `benchmark-bundle` command remains the final source of the Worker
-submission and independently revalidates every generated gold word against the
-original reviewed projection and primary/replay result.
+Reference only `review/materialized/materialization.json` from a
+`alignment-benchmark-workspace-v2` manifest; the bundler resolves and verifies
+the exact fixture paths and digests without manual copying. The existing
+`benchmark-bundle` command remains the final source of the Worker submission
+and independently revalidates every generated gold word against the original
+reviewed projection and primary/replay result.
 
 This automation does not assert rights, mark boundaries, claim clean-runner
 reproduction, or decide H1 pass/fail. Those facts remain explicit private human

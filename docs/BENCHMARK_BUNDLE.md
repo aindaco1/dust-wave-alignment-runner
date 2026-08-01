@@ -52,7 +52,7 @@ reproducible source-artifact identity in addition to the reviewed commit pin.
 
 ## Workspace manifest
 
-`workspace.json` has this exact shape:
+For existing manually prepared inputs, workspace v1 has this exact shape:
 
 ```json
 {
@@ -75,6 +75,35 @@ reproducible source-artifact identity in addition to the reviewed commit pin.
   "cleanEnvironmentReproduced": true
 }
 ```
+
+The packet/materializer flow should use workspace v2 so no gold or preview
+paths are copied by hand:
+
+```json
+{
+  "schemaVersion": "alignment-benchmark-workspace-v2",
+  "submissionId": "opera-bilingual-whisperx-v1",
+  "corpusVersion": "opera-rights-cleared-bilingual-v1",
+  "adapter": "whisperx",
+  "fixtures": [
+    {
+      "fixtureId": "opera-en-01",
+      "requestPath": "fixtures/opera-en-01/request.json",
+      "resultPath": "fixtures/opera-en-01/result-primary.json",
+      "replayResultPath": "fixtures/opera-en-01/result-replay.json",
+      "duplicateBillableJobCreated": false
+    }
+  ],
+  "reviewMaterializationPath": "review/materialized/materialization.json",
+  "resourceRunsPath": "runs/resources.json",
+  "cleanEnvironmentReproduced": true
+}
+```
+
+The bundler verifies the materialization schema, exact fixture set, and every
+gold/preview file digest before running the same v1 word, projection, candidate,
+preview, resource, and idempotency validation. V1 remains supported; both
+workspace versions emit the unchanged submission schema consumed by Podcast.
 
 Use a new `submissionId` whenever evidence changes. A repeated ID with
 different canonical evidence is deliberately rejected by the Worker.
