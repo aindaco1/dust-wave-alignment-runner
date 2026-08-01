@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,9 @@ from dustwave_alignment_runner.benchmark import (
     BENCHMARK_RUNNER_REPOSITORY,
     BENCHMARK_RUNNER_REVISION,
     build_benchmark_submission,
+)
+from dustwave_alignment_runner.benchmark_discovery import (
+    discover_benchmark_review_workspace,
 )
 from dustwave_alignment_runner.benchmark_review import (
     _balanced_selection,
@@ -322,6 +326,80 @@ def test_builds_and_materializes_one_private_review_packet(tmp_path: Path) -> No
         os.stat(path).st_mode & 0o777 == 0o600
         for path in (materialization_path, gold_path, preview_path)
     )
+
+
+def test_discovers_one_private_review_workspace_deterministically(
+    tmp_path: Path,
+) -> None:
+    paths = _workspace(tmp_path)
+    fixture = tmp_path / "fixtures" / "fixture_en_01"
+    fixture.mkdir(parents=True)
+    shutil.copy2(tmp_path / "request.json", fixture / "request.json")
+    shutil.copy2(paths["primary"], fixture / "result-primary.json")
+    output = tmp_path / "private" / "review-workspace.json"
+
+    first = discover_benchmark_review_workspace(
+        tmp_path,
+        Path("fixtures"),
+        "whisperx",
+        output,
+    )
+    second = discover_benchmark_review_workspace(
+        tmp_path,
+        Path("fixtures"),
+        "whisperx",
+        output,
+    )
+
+    assert first == second
+    assert first == {
+        "written": str(output),
+        "workspaceSha256": sha256_hex(output.read_bytes()),
+        "workspaceBytes": len(output.read_bytes()),
+        "fixtureCount": 1,
+        "englishFixtureCount": 1,
+        "spanishFixtureCount": 0,
+    }
+    assert os.stat(output).st_mode & 0o777 == 0o600
+    assert json.loads(output.read_text(encoding="utf-8")) == {
+        "schemaVersion": "alignment-benchmark-review-workspace-v1",
+        "adapter": "whisperx",
+        "fixtures": [
+            {
+                "fixtureId": "fixture_en_01",
+                "requestPath": "fixtures/fixture_en_01/request.json",
+                "resultPath": "fixtures/fixture_en_01/result-primary.json",
+            }
+        ],
+    }
+
+
+def test_discovery_rejects_partial_and_symlinked_private_fixtures(
+    tmp_path: Path,
+) -> None:
+    _workspace(tmp_path)
+    fixture = tmp_path / "fixtures" / "fixture_en_01"
+    fixture.mkdir(parents=True)
+    shutil.copy2(tmp_path / "request.json", fixture / "request.json")
+
+    with pytest.raises(ContractError, match="must contain request.json"):
+        discover_benchmark_review_workspace(
+            tmp_path,
+            Path("fixtures"),
+            "whisperx",
+            tmp_path / "workspace.json",
+        )
+
+    shutil.copy2(tmp_path / "primary.json", fixture / "result-primary.json")
+    fixture_2 = tmp_path / "fixtures" / "fixture_en_02"
+    fixture_2.symlink_to(fixture, target_is_directory=True)
+    with pytest.raises(ContractError, match="symbolic links"):
+        discover_benchmark_review_workspace(
+            tmp_path,
+            Path("fixtures"),
+            "whisperx",
+            tmp_path / "workspace.json",
+        )
 
 
 def test_review_materialization_rejects_stale_incomplete_and_escaping_inputs(
