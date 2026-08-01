@@ -22,9 +22,9 @@ BENCHMARK_PREVIEWS_SCHEMA = "alignment-benchmark-previews-v1"
 BENCHMARK_RESOURCES_SCHEMA = "alignment-benchmark-resources-v1"
 BENCHMARK_SUBMISSION_SCHEMA = "alignment-benchmark-submission-v1"
 BENCHMARK_RUNNER_REPOSITORY = "aindaco1/dust-wave-alignment-runner"
-BENCHMARK_RUNNER_REVISION = "3c5ab054fdad375901eb186f32d7aed6cdb40413"
+BENCHMARK_RUNNER_REVISION = "e611801d2af82dcdb079444b7e8a7eea4309d1a6"
 BENCHMARK_RUNNER_DIGEST = (
-    "sha256:5b07bbf315bd62a3c445a7a5a476bf642f91aa1c781173aa1f4e4e8021a51178"
+    "sha256:8a7cda2702487a1d542d5fb740efe8580ca9edd99f405d722d610536c73a3a11"
 )
 BENCHMARK_ADAPTERS: dict[str, dict[str, str]] = {
     "whisperx": {

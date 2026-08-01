@@ -30,9 +30,9 @@ the output path, byte length, and SHA-256—never words or local input paths.
 The emitted file targets the exact Podcast launch pins:
 
 - repository `aindaco1/dust-wave-alignment-runner`;
-- execution revision `3c5ab054fdad375901eb186f32d7aed6cdb40413`;
+- execution revision `e611801d2af82dcdb079444b7e8a7eea4309d1a6`;
 - runner digest
-  `sha256:5b07bbf315bd62a3c445a7a5a476bf642f91aa1c781173aa1f4e4e8021a51178`;
+  `sha256:8a7cda2702487a1d542d5fb740efe8580ca9edd99f405d722d610536c73a3a11`;
 - WhisperX `3.8.6` with the `default-en-es-v1` identity, or stable-ts
   `2.19.1` with the `openai-whisper-base` identity.
 
@@ -40,6 +40,10 @@ The bundler may be run from a later reviewed source revision: the revision in
 the evidence identifies the exact adapter execution that produced the primary
 and replay results. The Podcast Worker rejects a bundle after its configured
 execution pins change, so target drift fails closed.
+
+The runner digest is the SHA-256 of the deterministic Git tar archive for the
+execution revision (`git archive --format=tar REVISION`). It gives operators a
+reproducible source-artifact identity in addition to the reviewed commit pin.
 
 ## Workspace manifest
 
