@@ -275,3 +275,63 @@ def test_benchmark_resource_cli_dispatches_import(
 
     assert json.loads(capsys.readouterr().out) == {"runCount": 2}
     assert calls == [([english, spanish], tmp_path, "whisperx", output)]
+
+
+def test_benchmark_finalize_cli_dispatches_attested_bundle(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    calls = []
+    monkeypatch.setattr(
+        "dustwave_alignment_runner.cli.finalize_benchmark_submission",
+        lambda *arguments: calls.append(arguments) or {"fixtureCount": 12},
+    )
+    review_workspace = tmp_path / "review-workspace.json"
+    materialization = tmp_path / "materialization.json"
+    resources = tmp_path / "resources.json"
+    workspace_output = tmp_path / "workspace.json"
+    submission_output = tmp_path / "submission.json"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "dustwave-align",
+            "benchmark-finalize",
+            "--review-workspace",
+            str(review_workspace),
+            "--review-materialization",
+            str(materialization),
+            "--resource-runs",
+            str(resources),
+            "--input-root",
+            str(tmp_path),
+            "--submission-id",
+            "submission_final_01",
+            "--corpus-version",
+            "corpus_v1",
+            "--confirm-no-duplicate-billable-jobs",
+            "--confirm-clean-environment-reproduced",
+            "--workspace-output",
+            str(workspace_output),
+            "--submission-output",
+            str(submission_output),
+        ],
+    )
+
+    main()
+
+    assert json.loads(capsys.readouterr().out) == {"fixtureCount": 12}
+    assert calls == [
+        (
+            review_workspace,
+            materialization,
+            resources,
+            tmp_path,
+            "submission_final_01",
+            "corpus_v1",
+            True,
+            True,
+            workspace_output,
+            submission_output,
+        )
+    ]

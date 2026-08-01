@@ -220,6 +220,32 @@ values from the clean runner; do not estimate or backfill them.
 
 ## Final review and import
 
+After review materialization, replay runs, resource import, and the external
+operational checks are complete, create the final workspace and submission in
+one step:
+
+```sh
+uv run dustwave-align benchmark-finalize \
+  --review-workspace review-workspace.json \
+  --review-materialization review/materialized/materialization.json \
+  --resource-runs runs/resources.json \
+  --input-root /private/alignment-benchmark \
+  --submission-id opera-bilingual-whisperx-v1 \
+  --corpus-version opera-rights-cleared-bilingual-v1 \
+  --confirm-no-duplicate-billable-jobs \
+  --confirm-clean-environment-reproduced \
+  --workspace-output out/workspace.json \
+  --submission-output /private/alignment-benchmark/out/submission.json
+```
+
+The command reuses the discovered review workspace, requires each primary
+result to have a sibling `result-replay.json`, and builds workspace v2 with the
+exact materialization/resource references before invoking the existing
+independent bundler. Both outputs are immutable and mode `0600`. The two
+confirmation flags are explicit operator attestations: the command cannot
+inspect provider billing or decide that a runner was clean. Rights approval
+also remains in the separate controlled operational record.
+
 Before import:
 
 1. Verify rights and human-gold review in the private operational record.

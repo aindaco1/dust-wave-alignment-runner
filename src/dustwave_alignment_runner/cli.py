@@ -11,6 +11,7 @@ from typing import Any
 
 from .benchmark import build_benchmark_submission
 from .benchmark_discovery import discover_benchmark_review_workspace
+from .benchmark_finalize import finalize_benchmark_submission
 from .benchmark_resources import build_benchmark_resource_file
 from .benchmark_review import (
     build_benchmark_review_packet,
@@ -87,6 +88,28 @@ def main() -> None:
     )
     resource_import.add_argument("--input-root", type=Path, required=True)
     resource_import.add_argument("--output", type=Path, required=True)
+    finalize = subcommands.add_parser(
+        "benchmark-finalize",
+        help="Build the attested final workspace and submission.",
+    )
+    finalize.add_argument("--review-workspace", type=Path, required=True)
+    finalize.add_argument("--review-materialization", type=Path, required=True)
+    finalize.add_argument("--resource-runs", type=Path, required=True)
+    finalize.add_argument("--input-root", type=Path, required=True)
+    finalize.add_argument("--submission-id", required=True)
+    finalize.add_argument("--corpus-version", required=True)
+    finalize.add_argument(
+        "--confirm-no-duplicate-billable-jobs",
+        action="store_true",
+        required=True,
+    )
+    finalize.add_argument(
+        "--confirm-clean-environment-reproduced",
+        action="store_true",
+        required=True,
+    )
+    finalize.add_argument("--workspace-output", type=Path, required=True)
+    finalize.add_argument("--submission-output", type=Path, required=True)
     arguments = parser.parse_args()
     try:
         if arguments.command == "validate":
@@ -161,6 +184,25 @@ def main() -> None:
                         arguments.input_root,
                         arguments.adapter,
                         arguments.output,
+                    ),
+                    separators=(",", ":"),
+                )
+            )
+            return
+        if arguments.command == "benchmark-finalize":
+            print(
+                json.dumps(
+                    finalize_benchmark_submission(
+                        arguments.review_workspace,
+                        arguments.review_materialization,
+                        arguments.resource_runs,
+                        arguments.input_root,
+                        arguments.submission_id,
+                        arguments.corpus_version,
+                        arguments.confirm_no_duplicate_billable_jobs,
+                        arguments.confirm_clean_environment_reproduced,
+                        arguments.workspace_output,
+                        arguments.submission_output,
                     ),
                     separators=(",", ":"),
                 )
