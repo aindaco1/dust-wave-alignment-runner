@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; media-src blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    >
+    <meta name="referrer" content="no-referrer">
+    <title>Dust Wave — Alignment benchmark review</title>
+    <link rel="stylesheet" href="benchmark-review.css">
+    <script defer src="benchmark-review.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow" data-copy="eyebrow">Dust Wave private tool</p>
+          <h1 data-copy="title">Alignment benchmark review</h1>
+          <p class="lede" data-copy="lede">
+            Review exact word boundaries locally. Nothing is uploaded.
+          </p>
+        </div>
+        <nav class="language-switch" aria-label="Language" data-copy-aria="language">
+          <button type="button" data-language="en" aria-pressed="true">English</button>
+          <button type="button" data-language="es" aria-pressed="false">Español</button>
+        </nav>
+      </header>
+
+      <section class="panel setup" aria-labelledby="setup-title">
+        <div class="section-heading">
+          <div>
+            <p class="step">1</p>
+            <h2 id="setup-title" data-copy="setupTitle">Load private evidence</h2>
+          </div>
+          <p data-copy="setupHelp">
+            Select the immutable packet, then the matching local audio fixtures.
+          </p>
+        </div>
+        <div class="field-grid">
+          <label class="file-field">
+            <span data-copy="packetLabel">Review packet</span>
+            <input id="packet-file" type="file" accept="application/json,.json">
+          </label>
+          <label class="file-field">
+            <span data-copy="audioLabel">Fixture audio</span>
+            <input id="audio-files" type="file" accept="audio/*" multiple disabled>
+          </label>
+          <label class="file-field">
+            <span data-copy="progressLabel">Saved progress (optional)</span>
+            <input id="progress-file" type="file" accept="application/json,.json" disabled>
+          </label>
+        </div>
+        <p id="setup-status" class="status" role="status" aria-live="polite"></p>
+      </section>
+
+      <section id="review-panel" class="panel review" aria-labelledby="review-title" hidden>
+        <div class="section-heading review-heading">
+          <div>
+            <p class="step">2</p>
+            <h2 id="review-title" data-copy="reviewTitle">Review boundaries</h2>
+          </div>
+          <div class="progress" aria-live="polite">
+            <span id="progress-text"></span>
+            <progress id="progress-meter" max="1" value="0"></progress>
+          </div>
+        </div>
+
+        <article class="word-card">
+          <div class="word-context">
+            <p id="fixture-context" class="eyebrow"></p>
+            <p id="word-text" class="word"></p>
+            <p id="candidate-context" class="muted"></p>
+          </div>
+
+          <audio id="fixture-player" preload="metadata"></audio>
+          <div class="review-actions review-actions--preview">
+            <button id="play-preview" class="secondary" type="button" disabled data-copy="play">
+              Play word preview
+            </button>
+          </div>
+
+          <div class="timing-grid">
+            <label>
+              <span data-copy="startLabel">Start (milliseconds)</span>
+              <input id="word-start" type="number" min="0" step="1" inputmode="numeric">
+            </label>
+            <label>
+              <span data-copy="endLabel">End (milliseconds)</span>
+              <input id="word-end" type="number" min="1" step="1" inputmode="numeric">
+            </label>
+          </div>
+
+          <label class="check-field">
+            <input id="word-scorable" type="checkbox" checked>
+            <span data-copy="scorableLabel">Include this word in scored gold evidence</span>
+          </label>
+
+          <fieldset id="preview-decision" hidden>
+            <legend data-copy="previewLegend">Does the preview avoid clipping the word?</legend>
+            <label>
+              <input type="radio" name="preview-accepted" value="yes">
+              <span data-copy="yes">Yes</span>
+            </label>
+            <label>
+              <input type="radio" name="preview-accepted" value="no">
+              <span data-copy="no">No</span>
+            </label>
+          </fieldset>
+
+          <div class="review-actions review-actions--navigation">
+            <button id="previous-word" class="secondary" type="button" data-copy="previous">Previous</button>
+            <button id="mark-reviewed" class="primary" type="button" data-copy="markReviewed">
+              Mark reviewed and continue
+            </button>
+            <button id="next-word" class="secondary" type="button" data-copy="next">Next</button>
+          </div>
+          <p id="review-status" class="status" role="status" aria-live="polite"></p>
+        </article>
+      </section>
+
+      <section id="export-panel" class="panel export" aria-labelledby="export-title" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="step">3</p>
+            <h2 id="export-title" data-copy="exportTitle">Save review evidence</h2>
+          </div>
+          <p data-copy="exportHelp">
+            Progress exports are resumable. Final export unlocks only after every decision.
+          </p>
+        </div>
+        <div class="review-actions">
+          <button id="export-progress" class="secondary" type="button" data-copy="exportProgress">
+            Export progress
+          </button>
+          <button id="export-final" class="primary" type="button" disabled data-copy="exportFinal">
+            Export completed review
+          </button>
+        </div>
+        <p id="export-status" class="status" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+  </body>
+</html>

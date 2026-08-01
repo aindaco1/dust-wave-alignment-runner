@@ -51,6 +51,32 @@ The content-free command response reports exact counts and English/Spanish
 shortfalls. A shortfall is evidence that the private corpus is not yet large
 enough; it is not filled with duplicate or synthetic words.
 
+## Review locally
+
+Open `tools/benchmark-review.html` directly in a current browser. The app has a
+deny-by-default Content Security Policy, loads only its checked-in sibling CSS
+and JavaScript, permits media only through local `blob:` URLs, and has no
+network, storage, telemetry, HTML-injection, or service-worker path.
+
+1. Select the immutable packet.
+2. Select the two-to-five-minute fixture audio files together. The app hashes
+   each file and matches it to the packet; filenames are not trusted. Measured
+   media duration must also match the exact fixture duration.
+3. Review each balanced word in English or Spanish, play the padded local
+   preview, adjust integer millisecond boundaries, and explicitly mark the
+   decision reviewed. Required cut previews also require a yes/no clipping
+   decision.
+4. Export progress at any time and re-import it later. The export contains only
+   explicitly reviewed decisions and is bound to the packet SHA-256.
+5. Export the completed review only after every word is explicit and all exact
+   fixture audio is loaded. The materializer remains authoritative and rejects
+   a partial or malformed progress export.
+
+The interface switches between English and Spanish without doubling labels,
+uses keyboard-visible focus, 44-pixel minimum language controls, responsive
+one-column fields on narrow screens, reduced-motion handling, and bounded text
+wrapping. It never uploads or persists the private packet or audio.
+
 ## Completion contract
 
 The reviewer listens to the referenced private source, adjusts the suggested

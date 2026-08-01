@@ -38,7 +38,9 @@ Podcast import contract without uploading it:
 Before bundling, the private review-packet commands deterministically select a
 balanced English/Spanish sample and turn one packet-bound review export into
 canonical gold and preview files. They remove manual IDs and schema editing but
-never replace the rights, listening, or word-boundary decisions. See the
+never replace the rights, listening, or word-boundary decisions. The checked-in
+offline review app provides the bilingual, audio-hash-bound review surface with
+resumable local exports and no network path. See the
 [private benchmark review contract](docs/BENCHMARK_REVIEW.md).
 
 ```sh
