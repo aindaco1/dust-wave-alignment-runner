@@ -11,6 +11,7 @@ from typing import Any
 
 from .benchmark import build_benchmark_submission
 from .benchmark_discovery import discover_benchmark_review_workspace
+from .benchmark_resources import build_benchmark_resource_file
 from .benchmark_review import (
     build_benchmark_review_packet,
     materialize_benchmark_review,
@@ -74,6 +75,18 @@ def main() -> None:
     review_materialize.add_argument("--completion", type=Path, required=True)
     review_materialize.add_argument("--input-root", type=Path, required=True)
     review_materialize.add_argument("--output-root", type=Path, required=True)
+    resource_import = subcommands.add_parser(
+        "benchmark-resource-import",
+        help="Import content-free workflow resource evidence.",
+    )
+    resource_import.add_argument(
+        "--adapter", choices=["stable-ts", "whisperx"], required=True
+    )
+    resource_import.add_argument(
+        "--evidence", type=Path, action="append", required=True
+    )
+    resource_import.add_argument("--input-root", type=Path, required=True)
+    resource_import.add_argument("--output", type=Path, required=True)
     arguments = parser.parse_args()
     try:
         if arguments.command == "validate":
@@ -135,6 +148,19 @@ def main() -> None:
                         arguments.completion,
                         arguments.input_root,
                         arguments.output_root,
+                    ),
+                    separators=(",", ":"),
+                )
+            )
+            return
+        if arguments.command == "benchmark-resource-import":
+            print(
+                json.dumps(
+                    build_benchmark_resource_file(
+                        arguments.evidence,
+                        arguments.input_root,
+                        arguments.adapter,
+                        arguments.output,
                     ),
                     separators=(",", ":"),
                 )

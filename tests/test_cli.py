@@ -238,3 +238,40 @@ def test_benchmark_review_cli_dispatches_discovery(
 
     assert json.loads(capsys.readouterr().out) == {"fixtureCount": 12}
     assert calls == [(tmp_path, fixtures, "whisperx", output)]
+
+
+def test_benchmark_resource_cli_dispatches_import(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    calls = []
+    monkeypatch.setattr(
+        "dustwave_alignment_runner.cli.build_benchmark_resource_file",
+        lambda *arguments: calls.append(arguments) or {"runCount": 2},
+    )
+    english = tmp_path / "english.json"
+    spanish = tmp_path / "spanish.json"
+    output = tmp_path / "resources.json"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "dustwave-align",
+            "benchmark-resource-import",
+            "--adapter",
+            "whisperx",
+            "--evidence",
+            str(english),
+            "--evidence",
+            str(spanish),
+            "--input-root",
+            str(tmp_path),
+            "--output",
+            str(output),
+        ],
+    )
+
+    main()
+
+    assert json.loads(capsys.readouterr().out) == {"runCount": 2}
+    assert calls == [([english, spanish], tmp_path, "whisperx", output)]

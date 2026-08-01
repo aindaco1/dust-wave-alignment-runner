@@ -171,6 +171,26 @@ operational record, not in the import bundle.
 
 ## Resource-run file
 
+When the Podcast alignment workflow produced content-free evidence v2, import
+the measured English/Spanish artifacts directly instead of transcribing
+resource values:
+
+```sh
+uv run dustwave-align benchmark-resource-import \
+  --adapter whisperx \
+  --evidence runs/english-evidence.json \
+  --evidence runs/spanish-evidence.json \
+  --input-root /private/alignment-benchmark \
+  --output /private/alignment-benchmark/runs/resources.json
+```
+
+The importer revalidates the exact runner and adapter pins, structural quality,
+source language, positive measurements, and sampled-disk method. It writes the
+existing immutable mode-`0600` resource schema and reports content-free
+per-language 60-minute shortfalls. It never copies job IDs, hashes, local
+paths, or measurement metadata into the benchmark resource file. Older
+workflow artifacts without measured disk and language remain diagnostic only.
+
 ```json
 {
   "schemaVersion": "alignment-benchmark-resources-v1",
