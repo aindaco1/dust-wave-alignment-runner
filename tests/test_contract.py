@@ -7,9 +7,47 @@ import pytest
 from dustwave_alignment_runner.contract import (
     ContractError,
     canonical_json_bytes,
+    read_bounded_json,
     sha256_hex,
     validate_request,
 )
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (0.0, "0"),
+        (-0.0, "0"),
+        (62.0, "62"),
+        (1e-6, "0.000001"),
+        (1.234567890123456e-6, "0.000001234567890123456"),
+        (1e-7, "1e-7"),
+        (1e20, "100000000000000000000"),
+        (1e21, "1e+21"),
+        (-1.25e21, "-1.25e+21"),
+    ],
+)
+def test_canonical_numbers_match_ecmascript_json_stringify(
+    value: float,
+    expected: str,
+) -> None:
+    assert canonical_json_bytes(value) == expected.encode()
+
+
+def test_canonical_json_matches_worker_result_digest_shape() -> None:
+    value = {
+        "resource": {
+            "inputDurationMinutes": 62.0,
+            "wallClockMinutes": 8.0,
+            "peakMemoryMb": 1_000.0,
+            "confidence": 1e-6,
+            "runner": "python-3.12",
+        }
+    }
+    assert canonical_json_bytes(value) == (
+        b'{"resource":{"confidence":0.000001,"inputDurationMinutes":62,'
+        b'"peakMemoryMb":1000,"runner":"python-3.12","wallClockMinutes":8}}'
+    )
 
 
 def request_fixture(root: Path) -> dict:
@@ -27,7 +65,7 @@ def request_fixture(root: Path) -> dict:
         }
     ]
     return {
-        "schemaVersion": "1",
+        "schemaVersion": "2",
         "jobId": "job_fixture",
         "alignmentRevisionId": "alignment_fixture",
         "language": "es",
@@ -37,7 +75,8 @@ def request_fixture(root: Path) -> dict:
             "durationMs": 2_000,
         },
         "transcript": {
-            "sha256": sha256_hex(canonical_json_bytes(cues)),
+            "contentSha256": "a" * 64,
+            "projectionSha256": sha256_hex(canonical_json_bytes(cues)),
             "cues": cues,
         },
         "adapter": {
@@ -62,8 +101,8 @@ def test_accepts_canonical_checksums_and_stable_words(tmp_path: Path) -> None:
     [
         (lambda value: value["audio"].update(sha256="0" * 64), "Audio SHA-256"),
         (
-            lambda value: value["transcript"].update(sha256="0" * 64),
-            "Transcript SHA-256",
+            lambda value: value["transcript"].update(projectionSha256="0" * 64),
+            "Transcript projection SHA-256",
         ),
         (
             lambda value: value["transcript"]["cues"][0]["words"].append(
@@ -86,7 +125,9 @@ def test_rejects_changed_or_ambiguous_input(
     mutation(request)
     if "wordId values" in message:
         cues = request["transcript"]["cues"]
-        request["transcript"]["sha256"] = sha256_hex(canonical_json_bytes(cues))
+        request["transcript"]["projectionSha256"] = sha256_hex(
+            canonical_json_bytes(cues)
+        )
     with pytest.raises(ContractError, match=message):
         validate_request(request, tmp_path, "fixture")
 
@@ -108,3 +149,22 @@ def test_rejects_unsafe_model_reference(tmp_path: Path) -> None:
 
     with pytest.raises(ContractError, match="safe package or model"):
         validate_request(request, tmp_path, "fixture")
+
+
+@pytest.mark.parametrize(
+    "content, message",
+    [
+        ('{"schemaVersion":"2","schemaVersion":"2"}', "duplicate field"),
+        ('{"value":NaN}', "unsupported numeric constant"),
+    ],
+)
+def test_rejects_ambiguous_or_non_finite_json(
+    tmp_path: Path,
+    content: str,
+    message: str,
+) -> None:
+    request_path = tmp_path / "request.json"
+    request_path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ContractError, match=message):
+        read_bounded_json(request_path)

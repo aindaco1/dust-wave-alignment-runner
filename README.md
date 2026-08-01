@@ -30,6 +30,31 @@ uv run pytest
 
 Core CI does not install model extras or download model weights.
 
+## Private benchmark bundle
+
+The runner also assembles the human-reviewed H1 evidence into the exact
+Podcast import contract without uploading it:
+
+Before bundling, the private review-packet commands deterministically select a
+balanced English/Spanish sample and turn one packet-bound review export into
+canonical gold and preview files. They remove manual IDs and schema editing but
+never replace the rights, listening, or word-boundary decisions. See the
+[private benchmark review contract](docs/BENCHMARK_REVIEW.md).
+
+```sh
+uv run dustwave-align benchmark-bundle \
+  --manifest /private/alignment-benchmark/workspace.json \
+  --input-root /private/alignment-benchmark \
+  --output /private/alignment-benchmark/out/submission.json
+```
+
+It reuses the runner request/result validators, derives candidate and
+idempotency evidence from exact primary/replay results, accepts separate
+human-gold, preview-review, and measured resource files, and writes one
+canonical immutable mode-`0600` file. The server remains the source of truth
+for pass/fail and re-evaluates the bundle during private Super-admin import.
+See [the private benchmark bundle contract](docs/BENCHMARK_BUNDLE.md).
+
 ## Run contract
 
 ```sh
@@ -42,12 +67,12 @@ uv run dustwave-align run \
   --runner-digest sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 ```
 
-The request must contain:
+Request schema `2` must contain:
 
 - schema, job, alignment-revision, and language identifiers;
 - a regular audio file underneath `--input-root`, its SHA-256 and duration;
-- canonical reviewed cues, stable word IDs, and the SHA-256 of canonical cue
-  JSON; and
+- canonical reviewed cues and stable word IDs, the approved transcript content
+  SHA-256, and a separate SHA-256 of canonical cue/word projection JSON; and
 - explicit adapter model/model-version/settings metadata.
 
 The runner rejects traversal, symlink escapes, oversized or changed audio,

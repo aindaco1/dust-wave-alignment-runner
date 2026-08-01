@@ -28,7 +28,7 @@ def test_fixture_cli_writes_deterministic_non_passing_evidence(
         }
     ]
     request = {
-        "schemaVersion": "1",
+        "schemaVersion": "2",
         "jobId": "job_fixture",
         "alignmentRevisionId": "alignment_fixture",
         "language": "es",
@@ -38,7 +38,8 @@ def test_fixture_cli_writes_deterministic_non_passing_evidence(
             "durationMs": 2_000,
         },
         "transcript": {
-            "sha256": sha256_hex(canonical_json_bytes(cues)),
+            "contentSha256": "a" * 64,
+            "projectionSha256": sha256_hex(canonical_json_bytes(cues)),
             "cues": cues,
         },
         "adapter": {
@@ -99,7 +100,7 @@ def test_fixture_cli_rejects_existing_result_for_different_runner(
         }
     ]
     request = {
-        "schemaVersion": "1",
+        "schemaVersion": "2",
         "jobId": "job_fixture",
         "alignmentRevisionId": "alignment_fixture",
         "language": "es",
@@ -109,7 +110,8 @@ def test_fixture_cli_rejects_existing_result_for_different_runner(
             "durationMs": 1_000,
         },
         "transcript": {
-            "sha256": sha256_hex(canonical_json_bytes(cues)),
+            "contentSha256": "a" * 64,
+            "projectionSha256": sha256_hex(canonical_json_bytes(cues)),
             "cues": cues,
         },
         "adapter": {
@@ -144,3 +146,61 @@ def test_fixture_cli_rejects_existing_result_for_different_runner(
     with pytest.raises(SystemExit):
         main()
     assert f"sha256:{'0' * 64}" in output.read_text(encoding="utf-8")
+
+
+def test_benchmark_review_cli_dispatches_packet_and_materialization(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    packet_calls = []
+    materialization_calls = []
+    monkeypatch.setattr(
+        "dustwave_alignment_runner.cli.build_benchmark_review_packet",
+        lambda *arguments: packet_calls.append(arguments) or {"fixtureCount": 12},
+    )
+    monkeypatch.setattr(
+        "dustwave_alignment_runner.cli.materialize_benchmark_review",
+        lambda *arguments: materialization_calls.append(arguments)
+        or {"goldFileCount": 12},
+    )
+    manifest = tmp_path / "workspace.json"
+    packet = tmp_path / "packet.json"
+    completion = tmp_path / "completion.json"
+    output = tmp_path / "materialized"
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "dustwave-align",
+            "benchmark-review-packet",
+            "--manifest",
+            str(manifest),
+            "--input-root",
+            str(tmp_path),
+            "--output",
+            str(packet),
+        ],
+    )
+    main()
+    assert json.loads(capsys.readouterr().out) == {"fixtureCount": 12}
+    assert packet_calls == [(manifest, tmp_path, packet)]
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "dustwave-align",
+            "benchmark-review-materialize",
+            "--packet",
+            str(packet),
+            "--completion",
+            str(completion),
+            "--input-root",
+            str(tmp_path),
+            "--output-root",
+            str(output),
+        ],
+    )
+    main()
+    assert json.loads(capsys.readouterr().out) == {"goldFileCount": 12}
+    assert materialization_calls == [(packet, completion, tmp_path, output)]

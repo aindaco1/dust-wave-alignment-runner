@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -12,7 +13,7 @@ MAX_REQUEST_BYTES = 5 * 1024 * 1024
 MAX_AUDIO_BYTES = 4 * 1024 * 1024 * 1024
 MAX_AUDIO_DURATION_MS = 24 * 60 * 60 * 1000
 MAX_CUES = 20_000
-MAX_WORDS = 200_000
+MAX_WORDS = 25_000
 IDENTIFIER = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 SHA256 = re.compile(r"^[a-f0-9]{64}$")
 RUNNER_DIGEST = re.compile(r"^sha256:[a-f0-9]{64}$")
@@ -38,12 +39,76 @@ class ValidatedRequest:
 
 
 def canonical_json_bytes(value: Any) -> bytes:
-    return json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
+    """Serialize the bounded contracts exactly like the JS canonicalizer.
+
+    Python and ECMAScript otherwise disagree on valid JSON spellings such as
+    ``1.0`` versus ``1`` and ``1e-06`` versus ``0.000001``. The result digest is
+    verified in a Worker, so its number representation must follow
+    ``JSON.stringify`` rather than Python's default encoder.
+    """
+
+    return _canonical_json(value).encode("utf-8")
+
+
+def _canonical_json(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return _ecmascript_number(value)
+    if isinstance(value, list):
+        return "[" + ",".join(_canonical_json(item) for item in value) + "]"
+    if isinstance(value, dict):
+        if not all(isinstance(key, str) for key in value):
+            raise ContractError("Canonical JSON object keys must be strings.")
+        return (
+            "{"
+            + ",".join(
+                f"{_canonical_json(key)}:{_canonical_json(value[key])}"
+                for key in sorted(value)
+            )
+            + "}"
+        )
+    raise ContractError("Canonical JSON contains an unsupported value.")
+
+
+def _ecmascript_number(value: float) -> str:
+    if not math.isfinite(value):
+        raise ContractError("Canonical JSON numbers must be finite.")
+    if value == 0:
+        return "0"
+
+    negative = value < 0
+    raw = repr(abs(value)).lower()
+    mantissa, exponent_text = (raw.split("e", 1) + ["0"])[:2]
+    exponent = int(exponent_text)
+    integer, separator, fraction = mantissa.partition(".")
+    digits = integer + (fraction if separator else "")
+    decimal_at = len(integer) + exponent
+    while len(digits) > 1 and digits.endswith("0"):
+        digits = digits[:-1]
+
+    magnitude = abs(value)
+    if 1e-6 <= magnitude < 1e21:
+        if decimal_at <= 0:
+            rendered = "0." + ("0" * -decimal_at) + digits
+        elif decimal_at >= len(digits):
+            rendered = digits + ("0" * (decimal_at - len(digits)))
+        else:
+            rendered = digits[:decimal_at] + "." + digits[decimal_at:]
+    else:
+        scientific_exponent = decimal_at - 1
+        coefficient = digits[0]
+        if len(digits) > 1:
+            coefficient += "." + digits[1:]
+        exponent_sign = "+" if scientific_exponent >= 0 else ""
+        rendered = f"{coefficient}e{exponent_sign}{scientific_exponent}"
+    return "-" + rendered if negative else rendered
 
 
 def sha256_hex(value: bytes) -> str:
@@ -56,6 +121,17 @@ def file_sha256(path: Path) -> str:
         while chunk := source.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def parse_strict_json(value: str, name: str) -> Any:
+    try:
+        return json.loads(
+            value,
+            object_pairs_hook=_unique_object,
+            parse_constant=_reject_json_constant,
+        )
+    except json.JSONDecodeError as error:
+        raise ContractError(f"{name} is invalid JSON.") from error
 
 
 def normalize_lexical_word(value: str) -> str:
@@ -74,9 +150,10 @@ def read_bounded_json(path: Path) -> dict[str, Any]:
     if size <= 0 or size > MAX_REQUEST_BYTES:
         raise ContractError("Request JSON exceeds its bounded size.")
     try:
-        parsed = json.loads(resolved.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        content = resolved.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
         raise ContractError("Request JSON is unreadable or invalid.") from error
+    parsed = parse_strict_json(content, "Request JSON")
     if not isinstance(parsed, dict):
         raise ContractError("Request JSON must be an object.")
     return parsed
@@ -100,7 +177,7 @@ def validate_request(
         },
         "request",
     )
-    if payload.get("schemaVersion") != "1":
+    if payload.get("schemaVersion") != "2":
         raise ContractError("Unsupported request schemaVersion.")
     _identifier(payload.get("jobId"), "jobId")
     _identifier(payload.get("alignmentRevisionId"), "alignmentRevisionId")
@@ -135,17 +212,26 @@ def validate_request(
         raise ContractError("Audio duration exceeds 24 hours.")
 
     transcript = _mapping(payload.get("transcript"), "transcript")
-    _exact_keys(transcript, {"sha256", "cues"}, "transcript")
-    transcript_sha256 = transcript.get("sha256")
-    if not isinstance(transcript_sha256, str) or not SHA256.fullmatch(
-        transcript_sha256
+    _exact_keys(
+        transcript,
+        {"contentSha256", "projectionSha256", "cues"},
+        "transcript",
+    )
+    content_sha256 = transcript.get("contentSha256")
+    if not isinstance(content_sha256, str) or not SHA256.fullmatch(content_sha256):
+        raise ContractError("transcript.contentSha256 must be lowercase SHA-256.")
+    projection_sha256 = transcript.get("projectionSha256")
+    if not isinstance(projection_sha256, str) or not SHA256.fullmatch(
+        projection_sha256
     ):
-        raise ContractError("transcript.sha256 must be lowercase SHA-256.")
+        raise ContractError("transcript.projectionSha256 must be lowercase SHA-256.")
     cues = transcript.get("cues")
     if not isinstance(cues, list) or not 1 <= len(cues) <= MAX_CUES:
         raise ContractError(f"transcript.cues must contain 1-{MAX_CUES} cues.")
-    if sha256_hex(canonical_json_bytes(cues)) != transcript_sha256:
-        raise ContractError("Transcript SHA-256 does not match canonical cues.")
+    if sha256_hex(canonical_json_bytes(cues)) != projection_sha256:
+        raise ContractError(
+            "Transcript projection SHA-256 does not match canonical cues."
+        )
 
     cue_ids: set[str] = set()
     word_ids: set[str] = set()
@@ -227,6 +313,19 @@ def _mapping(value: Any, name: str) -> dict[str, Any]:
 def _exact_keys(value: dict[str, Any], expected: set[str], name: str) -> None:
     if set(value) != expected:
         raise ContractError(f"{name} contains missing or unknown fields.")
+
+
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ContractError(f'JSON contains duplicate field "{key}".')
+        value[key] = item
+    return value
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ContractError(f"JSON contains unsupported numeric constant {value}.")
 
 
 def _identifier(value: Any, name: str) -> str:
