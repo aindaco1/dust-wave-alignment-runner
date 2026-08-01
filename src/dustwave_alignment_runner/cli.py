@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from .benchmark import build_benchmark_submission
+from .benchmark_review import (
+    build_benchmark_review_packet,
+    materialize_benchmark_review,
+)
 from .contract import (
     ContractError,
     canonical_json_bytes,
@@ -44,6 +48,21 @@ def main() -> None:
     bundle.add_argument("--manifest", type=Path, required=True)
     bundle.add_argument("--input-root", type=Path, required=True)
     bundle.add_argument("--output", type=Path, required=True)
+    review_packet = subcommands.add_parser(
+        "benchmark-review-packet",
+        help="Build one immutable private H1 review packet.",
+    )
+    review_packet.add_argument("--manifest", type=Path, required=True)
+    review_packet.add_argument("--input-root", type=Path, required=True)
+    review_packet.add_argument("--output", type=Path, required=True)
+    review_materialize = subcommands.add_parser(
+        "benchmark-review-materialize",
+        help="Materialize reviewed H1 gold and preview files.",
+    )
+    review_materialize.add_argument("--packet", type=Path, required=True)
+    review_materialize.add_argument("--completion", type=Path, required=True)
+    review_materialize.add_argument("--input-root", type=Path, required=True)
+    review_materialize.add_argument("--output-root", type=Path, required=True)
     arguments = parser.parse_args()
     try:
         if arguments.command == "validate":
@@ -67,6 +86,31 @@ def main() -> None:
                         arguments.manifest,
                         arguments.input_root,
                         arguments.output,
+                    ),
+                    separators=(",", ":"),
+                )
+            )
+            return
+        if arguments.command == "benchmark-review-packet":
+            print(
+                json.dumps(
+                    build_benchmark_review_packet(
+                        arguments.manifest,
+                        arguments.input_root,
+                        arguments.output,
+                    ),
+                    separators=(",", ":"),
+                )
+            )
+            return
+        if arguments.command == "benchmark-review-materialize":
+            print(
+                json.dumps(
+                    materialize_benchmark_review(
+                        arguments.packet,
+                        arguments.completion,
+                        arguments.input_root,
+                        arguments.output_root,
                     ),
                     separators=(",", ":"),
                 )

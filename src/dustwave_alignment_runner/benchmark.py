@@ -268,12 +268,14 @@ def _build_fixture(
     primary_candidates = _selected_candidates(
         result["manifest"],
         gold_words,
+        validated,
         duration_ms,
         f"{field}.result",
     )
     replay_candidates = _selected_candidates(
         replay_result["manifest"],
         gold_words,
+        validated,
         duration_ms,
         f"{field}.replayResult",
     )
@@ -397,25 +399,48 @@ def _load_gold_words(
 def _selected_candidates(
     manifest: dict[str, Any],
     gold_words: list[dict[str, Any]],
+    validated: ValidatedRequest,
     duration_ms: int,
     field: str,
 ) -> list[dict[str, Any]]:
-    candidates = manifest.get("candidateWords")
-    if not isinstance(candidates, list):
-        raise ContractError(f"{field}.candidateWords must be an array.")
-    indexed: dict[str, dict[str, Any]] = {}
-    for index, value in enumerate(candidates):
-        candidate = _mapping(value, f"{field}.candidateWords[{index}]")
-        word_id = candidate.get("wordId")
-        if isinstance(word_id, str):
-            indexed[word_id] = candidate
+    candidates = _validated_candidates(manifest, validated, duration_ms, field)
+    indexed = {candidate["wordId"]: candidate for candidate in candidates}
     selected: list[dict[str, Any]] = []
     for gold in gold_words:
         word_id = gold["wordId"]
         candidate = indexed.get(word_id)
         if candidate is None:
             raise ContractError(f"{field} omits gold word {word_id}.")
-        candidate_field = f"{field}.candidateWords[{word_id}]"
+        if (
+            candidate["wordId"] != word_id
+            or candidate["cueId"] != gold["cueId"]
+            or candidate["text"] != gold["text"]
+        ):
+            raise ContractError(
+                f"{field}.candidateWords[{word_id}] does not match the "
+                "reviewed projection."
+            )
+        selected.append(candidate)
+    return selected
+
+
+def _validated_candidates(
+    manifest: dict[str, Any],
+    validated: ValidatedRequest,
+    duration_ms: int,
+    field: str,
+) -> list[dict[str, Any]]:
+    values = manifest.get("candidateWords")
+    if not isinstance(values, list):
+        raise ContractError(f"{field}.candidateWords must be an array.")
+    if len(values) != len(validated.words):
+        raise ContractError(f"{field}.candidateWords has an invalid word count.")
+    candidates: list[dict[str, Any]] = []
+    for index, (value, expected) in enumerate(
+        zip(values, validated.words, strict=True)
+    ):
+        candidate_field = f"{field}.candidateWords[{index}]"
+        candidate = _mapping(value, candidate_field)
         _exact_keys(
             candidate,
             {
@@ -430,10 +455,13 @@ def _selected_candidates(
             },
             candidate_field,
         )
+        word_id = _identifier(candidate["wordId"], f"{candidate_field}.wordId")
+        cue_id = _identifier(candidate["cueId"], f"{candidate_field}.cueId")
+        text = _lexical_text(candidate["text"], f"{candidate_field}.text")
         if (
-            candidate["wordId"] != word_id
-            or candidate["cueId"] != gold["cueId"]
-            or candidate["text"] != gold["text"]
+            word_id != expected.word_id
+            or cue_id != expected.cue_id
+            or text != expected.text
         ):
             raise ContractError(
                 f"{candidate_field} does not match the reviewed projection."
@@ -465,11 +493,11 @@ def _selected_candidates(
             or not UNALIGNED_REASON.fullmatch(unaligned_reason)
         ):
             raise ContractError(f"{candidate_field}.unalignedReason is invalid.")
-        selected.append(
+        candidates.append(
             {
                 "wordId": word_id,
-                "cueId": gold["cueId"],
-                "text": gold["text"],
+                "cueId": cue_id,
+                "text": text,
                 "startsAtMs": starts_at_ms,
                 "endsAtMs": ends_at_ms,
                 "confidence": confidence,
@@ -477,7 +505,7 @@ def _selected_candidates(
                 "unalignedReason": unaligned_reason,
             }
         )
-    return selected
+    return candidates
 
 
 def _compare_replay(

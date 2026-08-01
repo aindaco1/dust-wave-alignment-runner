@@ -13,6 +13,11 @@ from dustwave_alignment_runner.benchmark import (
     BENCHMARK_RUNNER_REVISION,
     build_benchmark_submission,
 )
+from dustwave_alignment_runner.benchmark_review import (
+    _balanced_selection,
+    build_benchmark_review_packet,
+    materialize_benchmark_review,
+)
 from dustwave_alignment_runner.contract import (
     ContractError,
     canonical_json_bytes,
@@ -181,6 +186,236 @@ def test_rejects_workspace_path_escape_and_immutable_output_change(
     outside.unlink()
 
 
+def test_builds_and_materializes_one_private_review_packet(tmp_path: Path) -> None:
+    review_workspace = _review_workspace(tmp_path)
+    packet_path = tmp_path / "private" / "review-packet.json"
+
+    first = build_benchmark_review_packet(review_workspace, tmp_path, packet_path)
+    second = build_benchmark_review_packet(review_workspace, tmp_path, packet_path)
+
+    assert first == second
+    assert first == {
+        "written": str(packet_path),
+        "packetSha256": sha256_hex(packet_path.read_bytes()),
+        "packetBytes": len(packet_path.read_bytes()),
+        "fixtureCount": 1,
+        "englishReviewWordCount": 2,
+        "spanishReviewWordCount": 0,
+        "englishPreviewReviewCount": 2,
+        "spanishPreviewReviewCount": 0,
+        "englishReviewWordShortfall": 498,
+        "spanishReviewWordShortfall": 500,
+    }
+    assert os.stat(packet_path).st_mode & 0o777 == 0o600
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    assert packet["fixtures"][0]["reviewWords"] == [
+        {
+            "wordId": "word_1",
+            "cueId": "cue_1",
+            "text": "hello",
+            "candidateStartsAtMs": 101,
+            "candidateEndsAtMs": 399,
+            "confidence": 0.98,
+            "timingOrigin": "forced_alignment",
+            "previewReviewRequired": True,
+        },
+        {
+            "wordId": "word_2",
+            "cueId": "cue_1",
+            "text": "world",
+            "candidateStartsAtMs": 501,
+            "candidateEndsAtMs": 899,
+            "confidence": 0.97,
+            "timingOrigin": "forced_alignment",
+            "previewReviewRequired": True,
+        },
+    ]
+    assert "requestPath" not in packet_path.read_text(encoding="utf-8")
+    assert "resultPath" not in packet_path.read_text(encoding="utf-8")
+
+    completion_path = tmp_path / "private" / "completion.json"
+    _write_json(
+        completion_path,
+        {
+            "schemaVersion": "alignment-benchmark-review-completion-v1",
+            "packetSha256": first["packetSha256"],
+            "reviews": [
+                {
+                    "fixtureId": "fixture_en_01",
+                    "wordId": "word_1",
+                    "startsAtMs": 100,
+                    "endsAtMs": 400,
+                    "scorable": True,
+                    "acceptedWithoutClipping": True,
+                },
+                {
+                    "fixtureId": "fixture_en_01",
+                    "wordId": "word_2",
+                    "startsAtMs": 500,
+                    "endsAtMs": 900,
+                    "scorable": True,
+                    "acceptedWithoutClipping": False,
+                },
+            ],
+        },
+    )
+
+    materialized = materialize_benchmark_review(
+        packet_path,
+        completion_path,
+        tmp_path,
+        Path("review-output"),
+    )
+    assert (
+        materialize_benchmark_review(
+            packet_path,
+            completion_path,
+            tmp_path,
+            Path("review-output"),
+        )
+        == materialized
+    )
+
+    materialization_path = tmp_path / "review-output" / "materialization.json"
+    gold_path = tmp_path / "review-output" / "gold" / "fixture_en_01.json"
+    preview_path = tmp_path / "review-output" / "reviews" / "previews.json"
+    assert materialized == {
+        "written": str(materialization_path),
+        "materializationSha256": sha256_hex(materialization_path.read_bytes()),
+        "goldFileCount": 1,
+        "englishScorableGoldWordCount": 2,
+        "spanishScorableGoldWordCount": 0,
+        "previewReviewCount": 2,
+        "previewAcceptedWithoutClippingCount": 1,
+    }
+    assert json.loads(gold_path.read_text(encoding="utf-8"))["goldWords"] == [
+        {
+            "wordId": "word_1",
+            "cueId": "cue_1",
+            "text": "hello",
+            "startsAtMs": 100,
+            "endsAtMs": 400,
+            "scorable": True,
+        },
+        {
+            "wordId": "word_2",
+            "cueId": "cue_1",
+            "text": "world",
+            "startsAtMs": 500,
+            "endsAtMs": 900,
+            "scorable": True,
+        },
+    ]
+    assert json.loads(preview_path.read_text(encoding="utf-8"))["reviews"] == [
+        {
+            "fixtureId": "fixture_en_01",
+            "wordId": "word_1",
+            "acceptedWithoutClipping": True,
+        },
+        {
+            "fixtureId": "fixture_en_01",
+            "wordId": "word_2",
+            "acceptedWithoutClipping": False,
+        },
+    ]
+    assert all(
+        os.stat(path).st_mode & 0o777 == 0o600
+        for path in (materialization_path, gold_path, preview_path)
+    )
+
+
+def test_review_materialization_rejects_stale_incomplete_and_escaping_inputs(
+    tmp_path: Path,
+) -> None:
+    review_workspace = _review_workspace(tmp_path)
+    packet_path = tmp_path / "review-packet.json"
+    build_benchmark_review_packet(review_workspace, tmp_path, packet_path)
+    completion_path = tmp_path / "completion.json"
+    _write_json(
+        completion_path,
+        {
+            "schemaVersion": "alignment-benchmark-review-completion-v1",
+            "packetSha256": "0" * 64,
+            "reviews": [],
+        },
+    )
+
+    with pytest.raises(ContractError, match="different packet"):
+        materialize_benchmark_review(
+            packet_path,
+            completion_path,
+            tmp_path,
+            Path("review-output"),
+        )
+
+    completion = json.loads(completion_path.read_text(encoding="utf-8"))
+    completion["packetSha256"] = sha256_hex(packet_path.read_bytes())
+    _write_json(completion_path, completion)
+    with pytest.raises(ContractError, match="every packet word"):
+        materialize_benchmark_review(
+            packet_path,
+            completion_path,
+            tmp_path,
+            Path("review-output"),
+        )
+
+    completion["reviews"] = [
+        {
+            "fixtureId": "fixture_en_01",
+            "wordId": "word_1",
+            "startsAtMs": 100,
+            "endsAtMs": 400,
+            "scorable": True,
+            "acceptedWithoutClipping": True,
+        },
+        {
+            "fixtureId": "fixture_en_01",
+            "wordId": "word_2",
+            "startsAtMs": 500,
+            "endsAtMs": 900,
+            "scorable": True,
+            "acceptedWithoutClipping": True,
+        },
+    ]
+    _write_json(completion_path, completion)
+    with pytest.raises(ContractError, match="output-root escapes"):
+        materialize_benchmark_review(
+            packet_path,
+            completion_path,
+            tmp_path,
+            Path("../outside"),
+        )
+
+
+def test_review_selection_is_balanced_bounded_and_evenly_spaced() -> None:
+    candidates = [[{} for _ in range(1_000)], [{} for _ in range(100)]]
+
+    selected = _balanced_selection(candidates, [0, 1], 500)
+
+    assert len(selected[0]) == 400
+    assert len(selected[1]) == 100
+    assert selected[0][0] == 0
+    assert selected[0][-1] == 999
+    assert selected[1] == list(range(100))
+    assert len(set(selected[0])) == 400
+
+
+def test_review_packet_rejects_candidate_projection_tampering(tmp_path: Path) -> None:
+    review_workspace = _review_workspace(tmp_path)
+    primary_path = tmp_path / "primary.json"
+    primary = json.loads(primary_path.read_text(encoding="utf-8"))
+    primary["manifest"]["candidateWords"][0]["text"] = "tampered"
+    primary["manifestSha256"] = sha256_hex(canonical_json_bytes(primary["manifest"]))
+    _write_json(primary_path, primary)
+
+    with pytest.raises(ContractError, match="reviewed projection"):
+        build_benchmark_review_packet(
+            review_workspace,
+            tmp_path,
+            tmp_path / "review-packet.json",
+        )
+
+
 def _workspace(root: Path) -> dict[str, Any]:
     audio = root / "audio.bin"
     audio.write_bytes(b"private owned audio")
@@ -323,6 +558,26 @@ def _workspace(root: Path) -> dict[str, Any]:
         "primary": primary,
         "primary_digest": primary_digest,
     }
+
+
+def _review_workspace(root: Path) -> Path:
+    _workspace(root)
+    review_workspace = root / "review-workspace.json"
+    _write_json(
+        review_workspace,
+        {
+            "schemaVersion": "alignment-benchmark-review-workspace-v1",
+            "adapter": "whisperx",
+            "fixtures": [
+                {
+                    "fixtureId": "fixture_en_01",
+                    "requestPath": "request.json",
+                    "resultPath": "primary.json",
+                }
+            ],
+        },
+    )
+    return review_workspace
 
 
 def _candidate(
