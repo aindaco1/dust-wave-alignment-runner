@@ -17,6 +17,9 @@ from dustwave_alignment_runner.benchmark import (
 from dustwave_alignment_runner.benchmark_discovery import (
     discover_benchmark_review_workspace,
 )
+from dustwave_alignment_runner.benchmark_finalize import (
+    finalize_benchmark_submission,
+)
 from dustwave_alignment_runner.benchmark_review import (
     _balanced_selection,
     build_benchmark_review_packet,
@@ -530,6 +533,107 @@ def test_workspace_v2_consumes_exact_review_materialization(tmp_path: Path) -> N
             workspace_v2,
             tmp_path,
             tmp_path / "tampered-submission.json",
+        )
+
+
+def test_finalizes_convention_workspace_and_submission(tmp_path: Path) -> None:
+    paths = _workspace(tmp_path)
+    fixture = tmp_path / "fixtures" / "fixture_en_01"
+    fixture.mkdir(parents=True)
+    shutil.copy2(tmp_path / "request.json", fixture / "request.json")
+    shutil.copy2(paths["primary"], fixture / "result-primary.json")
+    shutil.copy2(tmp_path / "replay.json", fixture / "result-replay.json")
+    review_workspace = tmp_path / "review-workspace-final.json"
+    _write_json(
+        review_workspace,
+        {
+            "schemaVersion": "alignment-benchmark-review-workspace-v1",
+            "adapter": "whisperx",
+            "fixtures": [
+                {
+                    "fixtureId": "fixture_en_01",
+                    "requestPath": "fixtures/fixture_en_01/request.json",
+                    "resultPath": "fixtures/fixture_en_01/result-primary.json",
+                }
+            ],
+        },
+    )
+    materialization = _materialized_review(tmp_path)
+    workspace_output = Path("out/workspace.json")
+    submission_output = tmp_path / "out" / "submission.json"
+
+    first = finalize_benchmark_submission(
+        review_workspace,
+        materialization,
+        tmp_path / "resources.json",
+        tmp_path,
+        "submission_final_01",
+        "rights-cleared-bilingual-v1",
+        True,
+        True,
+        workspace_output,
+        submission_output,
+    )
+    second = finalize_benchmark_submission(
+        review_workspace,
+        materialization,
+        tmp_path / "resources.json",
+        tmp_path,
+        "submission_final_01",
+        "rights-cleared-bilingual-v1",
+        True,
+        True,
+        workspace_output,
+        submission_output,
+    )
+
+    assert first == second
+    assert first["fixtureCount"] == 1
+    assert first["workspaceWritten"] == str(tmp_path / workspace_output)
+    assert first["written"] == str(submission_output)
+    assert os.stat(tmp_path / workspace_output).st_mode & 0o777 == 0o600
+    assert os.stat(submission_output).st_mode & 0o777 == 0o600
+    workspace = json.loads((tmp_path / workspace_output).read_text(encoding="utf-8"))
+    assert workspace["fixtures"] == [
+        {
+            "fixtureId": "fixture_en_01",
+            "requestPath": "fixtures/fixture_en_01/request.json",
+            "resultPath": "fixtures/fixture_en_01/result-primary.json",
+            "replayResultPath": "fixtures/fixture_en_01/result-replay.json",
+            "duplicateBillableJobCreated": False,
+        }
+    ]
+    assert workspace["cleanEnvironmentReproduced"] is True
+
+
+def test_finalize_requires_attestations_and_exact_replay(tmp_path: Path) -> None:
+    review_workspace = _review_workspace(tmp_path)
+    with pytest.raises(ContractError, match="no-duplicate-billable-jobs"):
+        finalize_benchmark_submission(
+            review_workspace,
+            tmp_path / "materialization.json",
+            tmp_path / "resources.json",
+            tmp_path,
+            "submission_final_01",
+            "rights-cleared-bilingual-v1",
+            False,
+            True,
+            Path("out/workspace.json"),
+            tmp_path / "out" / "submission.json",
+        )
+
+    with pytest.raises(ContractError, match="result-primary.json"):
+        finalize_benchmark_submission(
+            review_workspace,
+            tmp_path / "materialization.json",
+            tmp_path / "resources.json",
+            tmp_path,
+            "submission_final_01",
+            "rights-cleared-bilingual-v1",
+            True,
+            True,
+            Path("out/workspace.json"),
+            tmp_path / "out" / "submission.json",
         )
 
 

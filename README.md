@@ -52,6 +52,10 @@ existing resource-run schema, retaining only validated English/Spanish timing,
 memory, disk, and runner measurements while reporting truthful 60-minute
 shortfalls.
 
+An attested finalizer discovers sibling replay results and builds workspace v2
+plus the canonical submission in one step. It automates paths and schemas while
+requiring explicit no-duplicate-billing and clean-environment confirmations.
+
 ```sh
 uv run dustwave-align benchmark-bundle \
   --manifest /private/alignment-benchmark/workspace.json \
