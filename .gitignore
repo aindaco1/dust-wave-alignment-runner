@@ -1,14 +1,86 @@
+# Python environments and uv state
 .venv/
+venv/
+.uv-cache/
+
+# Python, test, lint, and notebook caches
+__pycache__/
+*.py[cod]
+*$py.class
 .pytest_cache/
 .ruff_cache/
-__pycache__/
-*.pyc
+.mypy_cache/
+.pyright/
+.pytype/
+.pyre/
+.hypothesis/
+.tox/
+.nox/
+.ipynb_checkpoints/
+
+# Coverage and profiling output
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Python package output
 dist/
 build/
+*.egg-info/
+.eggs/
+wheelhouse/
+
+# Private alignment inputs, evidence, and model state
 work/
 evidence/
 model-cache/
 *.audio
+*.aac
+*.aif
+*.aiff
+*.caf
+*.flac
 *.mp3
 *.m4a
+*.ogg
+*.opus
 *.wav
+*.wma
+*.webm
+
+# Local credentials and environment overrides
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs and process diagnostics
+*.log
+
+# Editor-local state
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+*~
+
+# macOS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
